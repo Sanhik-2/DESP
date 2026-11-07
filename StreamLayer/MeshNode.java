@@ -91,10 +91,15 @@ public class MeshNode implements Runnable {
     private Selector selector;
     private ServerSocketChannel serverChannel;
     private volatile boolean running = true;
+    private final FrameConsumer frameConsumer;
 
-    public MeshNode(String ip, int port) {
+    public MeshNode(int port, FrameConsumer frameConsumer) {
+    this("127.0.0.1", port, frameConsumer);
+    }
+    public MeshNode(String ip, int port, FrameConsumer frameConsumer) {
         this.ip = ip;
         this.port = port;
+        this.frameConsumer = frameConsumer;
     }
 
     public void start() throws IOException {
@@ -182,10 +187,22 @@ public class MeshNode implements Runnable {
         System.out.printf("Received Frame -> ApiKey: %d, CorrId: %d, Tier: %d, PayloadSize: %d bytes\n",
                 session.getApiKey(), session.getCorrelationId(), session.getPriorityTier(), session.getPayload().remaining());
 
-        // TODO: Pass session.getPayload() directly to your LogSegment or routing logic
+        if (frameConsumer != null) {
+            frameConsumer.onFrameReceived(session.getApiKey(), session.getCorrelationId(), session.getPriorityTier(), session.getPayload(), client);
+        }
     }
+    /**
+     * Main method to start the MeshNode.
+     *
+     * @param args command-line arguments
+     * @throws IOException if an I/O error occurs
+     */
     public static void main(String[] args) throws IOException {
-        MeshNode node = new MeshNode("127.0.0.1", 9001);
+        MeshNode node = new MeshNode("127.0.0.1", 9001, (apiKey, correlationId, priorityTier, payload, channel) -> {
+            System.out.printf("[FrameConsumer] ApiKey: %d, CorrId: %d, Tier: %d, PayloadSize: %d bytes\n",
+                    apiKey, correlationId, priorityTier, payload.remaining());
+            // Here you can implement further processing of the received frame
+        });
         node.start();
     }
 }
