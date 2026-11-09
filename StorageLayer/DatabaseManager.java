@@ -5,7 +5,10 @@ import java.sql.*;
 public class DatabaseManager {
     private static final String DB_URL = "jdbc:sqlite:desp_storage.db";
     private Connection conn;
-
+    public void initStorage() {
+    this.dbManager = new DatabaseManager();
+    this.dbManager.init();
+}
     public void init() {
     try {
         // Force the JVM to load and register the SQLite driver
