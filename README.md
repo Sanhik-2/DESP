@@ -190,6 +190,6 @@ java -cp "bin:lib/sqlite-jdbc.jar:lib/*:." StreamLayer.MeshClient
 - [x] Deterministic 11-byte binary wire protocol with `0xCA` magic byte enforcement.
 - [x] TCP chunk reassembly and connection session state machine.
 - [x] Relational audit trail persistence via embedded JDBC (`StorageLayer.DatabaseManager`).
-- [ ] **Swing Monitoring Dashboard:** Real-time broker metrics, connection status, and ingested frame counters.
+- [ ] **Java FX Monitoring Dashboard:** Real-time broker metrics, connection status, and ingested frame counters.
 - [ ] **Swarm Simulator:** Multi-client simulated flight telemetry generation for live evaluation demos.
 - [ ] **Append-Only Disk Segment Engine:** Custom zero-copy log indexing (`FileChannel.transferTo`).
