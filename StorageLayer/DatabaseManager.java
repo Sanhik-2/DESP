@@ -1,51 +1,80 @@
 package StorageLayer;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:desp_storage.db";
-    private Connection conn;
-    public void initStorage() {
-    this.dbManager = new DatabaseManager();
-    this.dbManager.init();
-}
-    public void init() {
-    try {
-        // Force the JVM to load and register the SQLite driver
-        Class.forName("org.sqlite.JDBC");
 
-        conn = DriverManager.getConnection(DB_URL);
-        try (Statement stmt = conn.createStatement()) {
-            String sql = "CREATE TABLE IF NOT EXISTS message_log (" +
-                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                         "correlation_id INTEGER, " +
-                         "tier INTEGER, " +
-                         "payload_size INTEGER, " +
-                         "payload BLOB, " +
-                         "received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
-                         ");";
-            stmt.execute(sql);
+    private static final String DB_URL = "jdbc:sqlite:swarm_telemetry.db";
+
+    public DatabaseManager() {}
+
+    public synchronized void init() {
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            System.err.println("[DB] SQLite JDBC Driver not found on classpath!");
+            return;
         }
-        System.out.println("[DB] SQLite database initialized successfully.");
-    } catch (ClassNotFoundException e) {
-        System.err.println("[DB] Driver class missing from classpath: " + e.getMessage());
-    } catch (SQLException e) {
-        System.err.println("[DB] Init failed: " + e.getMessage());
-    }
-}
 
-    public synchronized void insertMessage(int correlationId, byte tier, byte[] payload) {
-        if (conn == null) return;
-        String sql = "INSERT INTO message_log (correlation_id, tier, payload_size, payload) VALUES (?, ?, ?, ?)";
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, correlationId);
-            pstmt.setInt(2, tier);
-            pstmt.setInt(3, payload.length);
-            pstmt.setBytes(4, payload);
+        String sql = """
+            CREATE TABLE IF NOT EXISTS telemetry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER,
+                tier INTEGER,
+                payload BLOB,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            """;
+
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+        } catch (SQLException e) {
+            System.err.println("[DB] Schema init error: " + e.getMessage());
+        }
+    }
+
+    public synchronized void insertMessage(int nodeId, byte tier, byte[] payload) {
+        String sql = "INSERT INTO telemetry(node_id, tier, payload) VALUES(?, ?, ?);";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, nodeId);
+            pstmt.setByte(2, tier);
+            pstmt.setBytes(3, payload);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.err.println("[StorageLayer] DB Insert Error: " + e.getMessage());
+            System.err.println("[DB] Tier 2 write failed: " + e.getMessage());
         }
     }
-    
+
+    public synchronized List<AuditRecord> fetchRecentRecords(int limit) {
+        List<AuditRecord> records = new ArrayList<>();
+        String query = "SELECT id, node_id, tier, datetime(timestamp, 'localtime') AS ts FROM telemetry ORDER BY id DESC LIMIT ?;";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, limit);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    records.add(new AuditRecord(
+                        rs.getInt("id"),
+                        rs.getInt("node_id"),
+                        rs.getInt("tier"),
+                        rs.getString("ts")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            // Non-fatal read lock contention during high-frequency writes
+        }
+        return records;
+    }
 }
